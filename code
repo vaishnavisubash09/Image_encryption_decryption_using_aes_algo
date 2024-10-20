@@ -1,0 +1,109 @@
+from tkinter import *
+from tkinter import filedialog, messagebox
+from PIL import Image, ImageTk
+from Crypto.Cipher import AES
+import hashlib
+import os
+import struct
+
+# Function to select a file using a file dialog
+def select_file():
+    filename = filedialog.askopenfilename(filetypes=[("All Files", "*.*")])  # Allow any file type
+    entry_image.delete(0, END)  # Clear the entry field
+    entry_image.insert(0, filename)  # Insert selected file path
+
+# Function to encrypt the selected image
+def encrypt_image():
+    imagename = entry_image.get()
+    password = hashlib.md5(entry_password.get().encode()).digest()  # Hash the password
+
+    if not os.path.exists(imagename):
+        messagebox.showerror("Error", "File does not exist!")
+        return
+
+    # Load image and convert it to bytes
+    img = Image.open(imagename)
+    img_bytes = img.tobytes()
+    width, height = img.size  # Get image dimensions
+
+    # Encrypt the image bytes using AES algorithm
+    try:
+        cipher = AES.new(password, AES.MODE_CBC, b'This is an IV456')  # CBC mode with IV
+        # Padding to ensure that the byte length is a multiple of 16
+        padding_length = 16 - len(img_bytes) % 16
+        img_bytes += bytes([padding_length]) * padding_length
+        ciphertext = cipher.encrypt(img_bytes)
+
+        # Save the encrypted image data along with width and height
+        cipher_filename = imagename + ".enc"
+        with open(cipher_filename, 'wb') as f:
+            f.write(struct.pack('II', width, height))  # Write width and height as metadata
+            f.write(ciphertext)
+        
+        messagebox.showinfo("Success", f"Image encrypted successfully and saved as {cipher_filename}")
+    except Exception as e:
+        messagebox.showerror("Error", f"Encryption failed: {e}")
+
+# Function to decrypt the selected image
+def decrypt_image():
+    ciphername = entry_image.get()
+    password = hashlib.md5(entry_password.get().encode()).digest()  # Hash the password
+
+    if not os.path.exists(ciphername):
+        messagebox.showerror("Error", "Encrypted file does not exist!")
+        return
+
+    # Decrypt the image bytes using AES algorithm
+    try:
+        with open(ciphername, 'rb') as f:
+            width, height = struct.unpack('II', f.read(8))  # Read width and height
+            ciphertext = f.read()
+
+        cipher = AES.new(password, AES.MODE_CBC, b'This is an IV456')
+        decrypted_bytes = cipher.decrypt(ciphertext)
+
+        # Remove padding
+        padding_length = decrypted_bytes[-1]
+        decrypted_bytes = decrypted_bytes[:-padding_length]
+
+        # Create a new image from decrypted bytes
+        img = Image.frombytes('RGB', (width, height), decrypted_bytes)  # Use the saved dimensions
+
+        # Save the decrypted image in the same directory as the encrypted file
+        decrypted_file_path = os.path.splitext(ciphername)[0] + "_decrypted.jpeg"
+        img.save(decrypted_file_path)
+        messagebox.showinfo("Success", f"Image decrypted successfully and saved as '{decrypted_file_path}'")
+    except Exception as e:
+        messagebox.showerror("Error", f"Decryption failed: {e}")
+
+# Create the GUI
+root = Tk()
+root.title("AES Image Encryption/Decryption")
+root.geometry("600x400")
+
+# Configure grid for centering
+root.grid_columnconfigure(0, weight=1)
+root.grid_columnconfigure(1, weight=1)
+root.grid_columnconfigure(2, weight=1)
+
+# Load background image
+background_image = ImageTk.PhotoImage(Image.open("C:/Users/Sonali/Downloads/background.png").resize((600, 400)))
+background_label = Label(root, image=background_image)
+background_label.place(relwidth=1, relheight=1)
+
+# Image selection UI
+Label(root, text="Select Image or Cipher File:", bg="lightgray").grid(row=0, column=0, padx=5, pady=5, sticky="e")
+entry_image = Entry(root, width=50)  # Adjusted width
+entry_image.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+Button(root, text="Browse", command=select_file, bg="lightblue", fg="black", width=10).grid(row=0, column=2, padx=5, pady=5, sticky="w")
+
+# Password entry UI
+Label(root, text="Password:", bg="lightgray").grid(row=1, column=0, padx=5, pady=5, sticky="e")
+entry_password = Entry(root, show='*', width=50)  # Adjusted width
+entry_password.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+
+# Encryption and decryption buttons with enhanced styling
+Button(root, text="Encrypt", command=encrypt_image, bg="green", fg="white", width=12).grid(row=2, column=0, padx=5, pady=5, sticky="e")
+Button(root, text="Decrypt", command=decrypt_image, bg="red", fg="white", width=12).grid(row=2, column=1, padx=5, pady=5, sticky="w")
+
+root.mainloop()
